@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 import 'screens/intro_screen.dart';
 import 'screens/mood_diving_screen.dart';
 import 'screens/chat_screen.dart';
+import 'screens/settings_screen.dart';
 import 'models/image_item.dart';
 
 final GoRouter appRouter = GoRouter(
@@ -22,6 +23,10 @@ final GoRouter appRouter = GoRouter(
         final message = extra['message'] as String?;
         return ChatScreen(selectedItem: item, initialMessage: message);
       },
+    ),
+    GoRoute(
+      path: '/settings',
+      builder: (context, state) => const SettingsScreen(),
     ),
   ],
 );

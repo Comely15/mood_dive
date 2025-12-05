@@ -1,9 +1,12 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'router.dart';
 
 import 'theme/light_theme.dart';
 import 'theme/dark_theme.dart';
+import 'theme/theme_provider.dart';
+import 'services/user_preferences.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,7 +17,15 @@ void main() async {
   } catch (e) {
     print("Firebase not initialized: $e");
   }
-  runApp(const MyApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => UserPreferences()),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -22,13 +33,14 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    
     return MaterialApp.router(
       title: 'Alter Ego',
       debugShowCheckedModeBanner: false,
       theme: lightTheme,
       darkTheme: darkTheme,
-      themeMode:
-          ThemeMode.system, // Automatically switch based on system setting
+      themeMode: themeProvider.themeMode,
       routerConfig: appRouter,
     );
   }

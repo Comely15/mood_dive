@@ -4,8 +4,12 @@ import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:uuid/uuid.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../services/firebase_service.dart';
 import '../services/api_service.dart';
+import '../services/user_preferences.dart';
 import '../models/image_item.dart';
 
 class IntroScreen extends StatefulWidget {
@@ -64,20 +68,44 @@ class _IntroScreenState extends State<IntroScreen> {
     }
   }
 
-  void _onImageTap(ImageItem item) {
+  void _onImageTap(ImageItem item) async {
+    // Provider 값을 먼저 캡처 (async 작업 전에)
+    final ageGroup = Provider.of<UserPreferences>(context, listen: false).ageGroup;
+    
     setState(() {
       _selectedItem = item;
       _messages.clear();
-      _addMessage(
-        types.TextMessage(
-          author: _bot,
-          createdAt: DateTime.now().millisecondsSinceEpoch,
-          id: const Uuid().v4(),
-          text:
-              "선택하신 '${item.style}' 스타일, 마음에 드시나요? 더 구체적으로 어떤 느낌을 원하시는지 말씀해주세요.",
-        ),
-      );
     });
+
+    // 서버에서 연령대에 맞는 인사말 가져오기
+    try {
+      final greeting = await _chatService.getGreeting(
+        item.style,
+        ageGroup: ageGroup,
+      );
+      if (mounted) {
+        _addMessage(
+          types.TextMessage(
+            author: _bot,
+            createdAt: DateTime.now().millisecondsSinceEpoch,
+            id: const Uuid().v4(),
+            text: greeting,
+          ),
+        );
+      }
+    } catch (e) {
+      print("Greeting error: $e");
+      if (mounted) {
+        _addMessage(
+          types.TextMessage(
+            author: _bot,
+            createdAt: DateTime.now().millisecondsSinceEpoch,
+            id: const Uuid().v4(),
+            text: "안녕하세요! '${item.style}' 스타일을 선택하셨네요. 어떤 제품을 찾고 계신가요?",
+          ),
+        );
+      }
+    }
 
     // Scroll to show details (delayed to allow layout to update)
     Future.delayed(const Duration(milliseconds: 300), () {
@@ -105,6 +133,9 @@ class _IntroScreenState extends State<IntroScreen> {
   }
 
   void _handleSendPressed(String text) async {
+    // Provider 값을 먼저 캡처 (async 작업 전에)
+    final ageGroup = Provider.of<UserPreferences>(context, listen: false).ageGroup;
+    
     final textMessage = types.TextMessage(
       author: _user,
       createdAt: DateTime.now().millisecondsSinceEpoch,
@@ -118,24 +149,29 @@ class _IntroScreenState extends State<IntroScreen> {
       final response = await _chatService.sendMessage(
         text,
         _selectedItem!.style,
+        ageGroup: ageGroup,
       );
 
-      final botMessage = types.TextMessage(
-        author: _bot,
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-        id: const Uuid().v4(),
-        text: response,
-      );
-      _addMessage(botMessage);
+      if (mounted) {
+        final botMessage = types.TextMessage(
+          author: _bot,
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          id: const Uuid().v4(),
+          text: response,
+        );
+        _addMessage(botMessage);
+      }
     } catch (e) {
       print("Chat Error: $e");
-      final errorMessage = types.TextMessage(
-        author: _bot,
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-        id: const Uuid().v4(),
-        text: "죄송합니다. 챗봇 연결에 문제가 발생했습니다. ($e)",
-      );
-      _addMessage(errorMessage);
+      if (mounted) {
+        final errorMessage = types.TextMessage(
+          author: _bot,
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          id: const Uuid().v4(),
+          text: "죄송합니다. 챗봇 연결에 문제가 발생했습니다.\n\n오류: $e\n\n백엔드 서버가 실행 중인지 확인해주세요.",
+        );
+        _addMessage(errorMessage);
+      }
     }
   }
 
@@ -144,12 +180,12 @@ class _IntroScreenState extends State<IntroScreen> {
       _messages.add(message);
     });
 
-    // Scroll to bottom on new message
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (_scrollController.hasClients) {
+    // Scroll to bottom on new message with longer delay for layout
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted && _scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
+          duration: const Duration(milliseconds: 500),
           curve: Curves.easeOut,
         );
       }
@@ -199,30 +235,45 @@ class _IntroScreenState extends State<IntroScreen> {
                         SliverToBoxAdapter(
                           child: Padding(
                             padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
-                                  "MOOD BOARD",
-                                  style: GoogleFonts.cinzel(
-                                    fontSize: 28,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 2.0,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  "당신의 무드를 선택하세요",
-                                  style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurface
-                                            .withValues(alpha: 0.7),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "MOOD BOARD",
+                                      style: GoogleFonts.cinzel(
+                                        fontSize: 28,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 2.0,
                                       ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      "당신의 무드를 선택하세요",
+                                      style: Theme.of(context).textTheme.bodyMedium
+                                          ?.copyWith(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onSurface
+                                                .withValues(alpha: 0.7),
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                                IconButton(
+                                  icon: PhosphorIcon(
+                                    PhosphorIcons.gear(PhosphorIconsStyle.bold),
+                                    color: Theme.of(context).colorScheme.primary,
+                                    size: 28,
+                                  ),
+                                  onPressed: () {
+                                    context.push('/settings');
+                                  },
                                 ),
                               ],
                             ),
@@ -310,10 +361,12 @@ class _IntroScreenState extends State<IntroScreen> {
                                     spacing: 8,
                                     runSpacing: 8,
                                     children: [
-                                      _buildStyleChip("더 모던하고 깔끔하게"),
-                                      _buildStyleChip("빈티지한 감성을 더해서"),
-                                      _buildStyleChip("화려하고 힙하게"),
-                                      _buildStyleChip("편안한 데일리룩으로"),
+                                      _buildStyleChip("캐주얼한 청바지 추천해줘"),
+                                      _buildStyleChip("데이트하기 좋은 옷"),
+                                      _buildStyleChip("편안한 운동화 찾아줘"),
+                                      _buildStyleChip("직장인 데일리룩"),
+                                      _buildStyleChip("가성비 좋은 아우터"),
+                                      _buildStyleChip("트렌디한 액세서리"),
                                     ],
                                   ),
                                   const SizedBox(height: 24),
